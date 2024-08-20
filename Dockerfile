@@ -1,19 +1,19 @@
-ARG CUDA_VERSION=11.8.0
-ARG IMAGE_DISTRO=ubi8
+ARG CUDA_VERSION=12.2.2
+ARG OS_VERSION=20.04
 
-FROM nvidia/cuda:${CUDA_VERSION}-devel-${IMAGE_DISTRO} AS builder
+FROM nvidia/cuda:${CUDA_VERSION}-devel-ubuntu${OS_VERSION} AS builder
 
 WORKDIR /build
 
 COPY . /build/
 
-RUN make
+RUN ./preprocess.sh && \
+    make clean && make
 
-FROM nvidia/cuda:${CUDA_VERSION}-runtime-${IMAGE_DISTRO}
+FROM nvidia/cuda:${CUDA_VERSION}-runtime-ubuntu${OS_VERSION}
 
 COPY --from=builder /build/gpu_burn /app/
-COPY --from=builder /build/compare.ptx /app/
+COPY --from=builder /build/compare*.ptx /app/compare_kernels/
 
 WORKDIR /app
 
-CMD ["./gpu_burn", "60"]
