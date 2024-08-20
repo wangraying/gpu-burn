@@ -26,29 +26,29 @@ override LDFLAGS  += -Wl,-rpath=${CUDAPATH}/lib
 override LDFLAGS  += -lcublas
 override LDFLAGS  += -lcudart
 
-COMPUTE      ?= 50
-CUDA_VERSION ?= 11.8.0
-IMAGE_DISTRO ?= ubi8
-
 override NVCCFLAGS ?=
 override NVCCFLAGS += -I${CUDAPATH}/include
-override NVCCFLAGS += -arch=compute_$(subst .,,${COMPUTE})
 
-IMAGE_NAME ?= gpu-burn
+SMS=$(shell nvcc --help | sed -n -e '/gpu-architecture <arch>/,/gpu-code <code>/ p' | sed -n -e '/Allowed values/,/gpu-code <code>/ p' | grep -i sm_ | grep -Eo 'sm_[0-9]+' | sed -e s/sm_//g | sort -g -u | tr '\n' ' ')
+GENCODE_FLAGS := $(foreach sm, $(SMS), -gencode arch=compute_$(sm),code=sm_$(sm))
+
+PTX_FILES := $(patsubst arch/%.cu,%.ptx,$(wildcard arch/*.cu))
 
 .PHONY: clean
 
-gpu_burn: gpu_burn-drv.o compare.ptx
+build: gpu_burn ${PTX_FILES}
+
+gpu_burn: gpu_burn-drv.o compare.o
 	g++ -o $@ $< -O3 ${LDFLAGS}
 
 %.o: %.cpp
 	g++ ${CFLAGS} -c $<
 
-%.ptx: %.cu
+%.ptx: arch/%.cu
 	PATH="${PATH}:${CCPATH}:." ${NVCC} ${NVCCFLAGS} -ptx $< -o $@
 
-clean:
-	$(RM) *.ptx *.o gpu_burn
+%.o: %.cu
+	PATH="${PATH}:${CCPATH}:." ${NVCC} ${NVCCFLAGS} $(GENCODE_FLAGS) -o $@ -c $<
 
-image:
-	docker build --build-arg CUDA_VERSION=${CUDA_VERSION} --build-arg IMAGE_DISTRO=${IMAGE_DISTRO} -t ${IMAGE_NAME} .
+clean:
+	$(RM) *.o gpu_burn
